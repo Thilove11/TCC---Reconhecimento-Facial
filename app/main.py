@@ -24,21 +24,20 @@ class CameraScreen(MDScreen):
         self.recognition_enabled = False
         self.cap = None
 
-        # Preparação do reconhecimento facial
         tmp_dir = "./tmp"
         os.makedirs(tmp_dir, exist_ok=True)
+        tmp_path = os.path.join(tmp_dir, "classificadorEigen.yml")
 
-        # Classificador e modelo
-        self.face_cascade = cv2.CascadeClassifier("./lib/haarcascade_frontalface_default.xml")
-        self.reconhecedor = cv2.face.EigenFaceRecognizer_create()
+        resp = requests.get("https://tcc-reconhecimento-facial-h8rq.onrender.com/api/treinamento/download/")
+        if resp.status_code != 200:
+            raise Exception(f"Erro ao baixar o modelo: {resp.status_code}")
 
-        treinamento = requests.get("http://127.0.0.1:8000/api/treinamento/").json()
-        model_url = treinamento[0]['modelo']
-        tmp_path = os.path.join(tmp_dir, "modelo.xml")
-        with open(tmp_path, "wb") as temp_file:
-            temp_file.write(requests.get(model_url).content)
-            self.reconhecedor.read(temp_file.name)
+        with open(tmp_path, "wb") as f:
+            f.write(resp.content)
 
+        reconhecedor = cv2.face.EigenFaceRecognizer_create()
+        reconhecedor.read(tmp_path)
+        print("Modelo carregado com sucesso!")
     # Inicia a câmera
     def open_camera_for_recognition(self):
         # Pega a referência do widget da KV
@@ -87,7 +86,7 @@ class CameraScreen(MDScreen):
             print(f"ID reconhecido: {label}")
 
             if label:
-                response = requests.get(f"http://127.0.0.1:8000/api/funcionarios/{label}/")
+                response = requests.get(f"https://tcc-reconhecimento-facial-h8rq.onrender.com/api/funcionarios/{label}/")
                 if response.status_code == 200:
                     funcionario = response.json()
                     self.show_recognized_user(funcionario)
@@ -137,7 +136,7 @@ class UsuarioScreen(MDScreen):
         } 
         print(funcionario)
         
-        url_api = "http://127.0.0.1:8000/api/registros/"
+        url_api = "https://tcc-reconhecimento-facial-h8rq.onrender.com/api/registros/"
 
         try:
             response = requests.post(url_api, json=funcionario)
