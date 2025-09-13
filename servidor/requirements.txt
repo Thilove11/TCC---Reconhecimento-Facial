@@ -17,12 +17,11 @@ packaging==25.0
 pillow==11.0.0
 psycopg2-binary==2.9.10
 Pygments==2.19.2
-pypiwin32==223
-pywin32==311
 requests==2.32.3
 sqlparse==0.5.3
 typing_extensions==4.14.1
 tzdata==2025.2
 urllib3==2.5.0
 zipp==3.23.0
+
 
