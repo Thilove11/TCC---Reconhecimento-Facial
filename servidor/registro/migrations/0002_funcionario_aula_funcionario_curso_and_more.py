@@ -13,19 +13,19 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='funcionario',
             name='aula',
-            field=models.CharField(default='Trabalho de Conclusão de Curso', max_length=20),
+            field=models.CharField(default='Trabalho de Conclusão de Curso', max_length=50),
             preserve_default=False,
         ),
         migrations.AddField(
             model_name='funcionario',
             name='curso',
-            field=models.CharField(default='Engenharia da Computação', max_length=20),
+            field=models.CharField(default='Engenharia da Computação', max_length=50),
             preserve_default=False,
         ),
         migrations.AddField(
             model_name='funcionario',
             name='matricula',
-            field=models.CharField(default='11111111111111', max_length=20),
+            field=models.CharField(default='11111111111111', max_length=50),
             preserve_default=False,
         ),
     ]
