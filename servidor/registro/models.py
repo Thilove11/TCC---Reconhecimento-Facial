@@ -7,10 +7,10 @@ class Funcionario(models.Model):
     slug = models.SlugField(max_length=200, unique=True)
     foto = models.ImageField(upload_to="foto/")
     nome = models.CharField(max_length=100)
-    cpf = models.CharField(max_length=20)
+    cpf = models.CharField(max_length=50)
     curso = models.CharField(max_length=100)
     aula = models.CharField(max_length=100)
-    matricula = models.CharField(max_length=20)
+    matricula = models.CharField(max_length=50)
 
     def __str__(self):
         return self.nome

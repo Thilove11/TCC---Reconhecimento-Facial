@@ -79,7 +79,7 @@ WSGI_APPLICATION = 'gestao.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+        'ENGINE': 'django.db.backends.postgresql_psycopg2-binary',
         'NAME': "reconhecimento_db",
         'USER': 'admin',
         'PASSWORD': 'YbHeDbaYKFHBw32SgHLI8xLkEYklnKRD',
