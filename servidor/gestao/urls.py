@@ -3,11 +3,12 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework.routers import DefaultRouter
-from registro.api.views import FuncionarioViewSet, TreinamentoViewSet
+from registro.api.views import FuncionarioViewSet, TreinamentoViewSet, RegistroFuncionarioViewSet
 
 router = DefaultRouter()
 router.register(r'funcionarios', FuncionarioViewSet)
 router.register(r'treinamento', TreinamentoViewSet)
+router.register(r'registros', RegistroFuncionarioViewSet)
 
 urlpatterns = [
     path('admin/', admin.site.urls),

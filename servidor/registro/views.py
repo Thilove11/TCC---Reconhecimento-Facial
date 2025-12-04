@@ -31,7 +31,7 @@ def criar_funcionario(request):
 
 def extract(camera_detection, funcionario_slug):
     amostra = 0
-    numeroAmostras = 10
+    numeroAmostras = 30
     largura, altura = 220, 220
     file_paths = []
 
@@ -63,7 +63,7 @@ def face_extract(context, funcionario):
     num_coletas = ColetaFaces.objects.filter(funcionario__slug=funcionario.slug).count()
 
     print(num_coletas)
-    if num_coletas >= 10:
+    if num_coletas >= 30:
         context['erro'] = 'Limite máximo de coletas atingido.'
     else:
         file_paths = extract(camera_detection, funcionario.slug)
