@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-aes==(%zq21*!9-rachp@7in(gf*5denyaa5ong7xo_bcix2!h
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["tcc-reconhecimento-facial-h8rq.onrender.com"]
 
 
 # Application definition
