@@ -1,101 +1,184 @@
-import cv2  
-import tempfile
-import requests
+import cv2
+import face_recognition
+import pickle
 import os
+import sys
 from datetime import datetime
+import requests
 
+from kivy.clock import Clock
+from kivy.graphics.texture import Texture
+from kivymd.uix.dialog import MDDialog
+from kivymd.uix.button import MDFlatButton
+from kivymd.uix.screen import MDScreen
 from kivymd.app import MDApp, App
 from kivy.lang import Builder
 from kivy.uix.image import Image 
-from kivy.graphics.texture import Texture 
 from kivy.clock import Clock 
 from kivy.uix.screenmanager import ScreenManager
 from kivy.core.window import Window
-
 from kivymd.uix.boxlayout import MDBoxLayout  
 from kivymd.uix.label import MDLabel
-from kivymd.uix.screen import MDScreen 
- 
-Window.size = (480, 720)  
+import sys
+
+Window.maximize()
 
 class CameraScreen(MDScreen):
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.recognition_enabled = False
         self.cap = None
 
-        tmp_dir = "./tmp"
-        os.makedirs(tmp_dir, exist_ok=True)
-        tmp_path = os.path.join(tmp_dir, "classificadorEigen.yml")
-
-        resp = requests.get("https://tcc-reconhecimento-facial-h8rq.onrender.com/api/treinamento/download/")
-        if resp.status_code != 200:
-            raise Exception(f"Erro ao baixar o modelo: {resp.status_code}")
-
-        with open(tmp_path, "wb") as f:
-            f.write(resp.content)
-
-        reconhecedor = cv2.face.EigenFaceRecognizer_create()
-        reconhecedor.read(tmp_path)
-        print("Modelo carregado com sucesso!")
-    # Inicia a câmera
-    def open_camera_for_recognition(self):
-        # Pega a referência do widget da KV
-        self.image = self.ids.camera_feed_full
-        
-        self.cap = cv2.VideoCapture(0)
-        if self.cap.isOpened():
-            print("Câmera aberta")
-            Clock.schedule_interval(self.load_video, 1.0 / 60.0)
-            Clock.schedule_once(self.start_recognition, 6)
+        # Path base do PyInstaller ou código normal
+        if getattr(sys, 'frozen', False):
+            self.BASE_DIR = sys._MEIPASS
         else:
-            print("Falha ao abrir a câmera")
+            self.BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # Captura e exibe o vídeo
+        # Carregar encodings do arquivo pickle
+        self.known_encodings, self.known_ids = self.load_pickle_encodings()
+
+
+    # -----------------------------------------------------
+    # 🔥 CARREGA encoding.pickle
+    # -----------------------------------------------------
+    def load_pickle_encodings(self):
+        pickle_path = os.path.join(self.BASE_DIR, "encodings.pickle")
+
+        if not os.path.exists(pickle_path):
+            print("❌ ERRO: encodings.pickle não encontrado!", pickle_path)
+            return [], []
+
+        print("🔵 Carregando encodings do arquivo:", pickle_path)
+
+        data = pickle.loads(open(pickle_path, "rb").read())
+
+        enc = data.get("encodings", [])
+        names = data.get("names", [])
+
+        print(f"✔ Encodings carregados: {len(enc)}")
+
+        return enc, names
+
+
+    # -----------------------------------------------------
+    # ABRE CÂMERA
+    # -----------------------------------------------------
+    def open_camera_for_recognition(self):
+        self.image = self.ids.camera_feed_full
+
+        self.cap = cv2.VideoCapture(0)
+
+        if self.cap.isOpened():
+            Clock.schedule_interval(self.load_video, 1.0 / 60.0)
+            Clock.schedule_once(self.start_recognition, 5)
+        else:
+            print("❌ Erro ao abrir a câmera")
+
+
+    # -----------------------------------------------------
+    # MOSTRA VÍDEO + ROI
+    # -----------------------------------------------------
     def load_video(self, *args):
         ret, frame = self.cap.read()
         if not ret:
-            print("Falha ao capturar o frame")
             return
 
-        # Desenha a elipse central
         altura, largura, _ = frame.shape
-        centro_x, centro_y = int(largura / 2), int(altura / 2)
+        centro_x, centro_y = largura // 2, altura // 2
+
+        # Elipse / ROI
         a, b = 140, 180
         x1, y1 = centro_x - a, centro_y - b
         x2, y2 = centro_x + a, centro_y + b
-        cv2.ellipse(frame, (centro_x, centro_y), (a, b), 0, 0, 360, (144, 238, 144), 6)
 
-        # Atualiza textura
+        cv2.ellipse(frame, (centro_x, centro_y), (a, b), 0, 0, 360, (50, 200, 50), 4)
+
+        # Mostra vídeo no Kivy
         buffer = cv2.flip(frame, 0).tobytes()
-        texture = Texture.create(size=(frame.shape[1], frame.shape[0]), colorfmt="bgr")
+        texture = Texture.create(size=(largura, altura), colorfmt="bgr")
         texture.blit_buffer(buffer, colorfmt="bgr", bufferfmt="ubyte")
         self.image.texture = texture
 
         if not self.recognition_enabled:
             return
 
-        # ROI e reconhecimento facial
+        # ROI da elipse
         roi = frame[y1:y2, x1:x2]
-        imagemCinza = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-        facesDetectadas = self.face_cascade.detectMultiScale(imagemCinza, 1.1, 5, minSize=(30, 30))
+        rgb_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2RGB)
 
-        for (x, y, w, h) in facesDetectadas:
-            imagemFace = cv2.resize(imagemCinza[y:y+h, x:x+w], (220, 220))
-            label, confianca = self.reconhecedor.predict(imagemFace)
-            print(f"ID reconhecido: {label}")
+        # Detecta face na ROI
+        boxes = face_recognition.face_locations(rgb_roi)
+        if len(boxes) == 0:
+            return
 
-            if label:
-                response = requests.get(f"https://tcc-reconhecimento-facial-h8rq.onrender.com/api/funcionarios/{label}/")
-                if response.status_code == 200:
-                    funcionario = response.json()
-                    self.show_recognized_user(funcionario)
+        encodings = face_recognition.face_encodings(rgb_roi, boxes)
+        if len(encodings) == 0:
+            return
 
-                Clock.unschedule(self.load_video)
-                self.reset_camera()
-            break
+        face_encoding = encodings[0]
 
-    # Habilita o reconhecimento após 5s
+       # -----------------------------------------------------
+        # 🔥 COMPARA FACE COM O ARQUIVO encodings.pickle
+        # -----------------------------------------------------
+        matches = face_recognition.compare_faces(self.known_encodings, face_encoding, tolerance=0.48)
+        distances = face_recognition.face_distance(self.known_encodings, face_encoding)
+
+        # 👉 PRINTA TODAS AS DISTÂNCIAS
+        print("Distâncias:", distances)
+
+        if len(distances) == 0:
+            print("Nenhuma face foi encontrada nos encodings.")
+            self.show_error()
+            self.stop_camera()
+            return
+
+        melhor_idx = distances.argmin()
+        menor_dist = distances[melhor_idx]
+
+        # 👉 PRINTA O MELHOR MATCH
+        print(f"Melhor índice: {melhor_idx}")
+        print(f"Menor distância: {menor_dist}")
+
+        if not matches[melhor_idx]:
+            print("Face encontrada, mas NÃO corresponde a nenhum usuário conhecido.")
+            self.show_error()
+            self.stop_camera()
+            return
+
+        # ID carregado do pickle
+        funcionario_id = self.known_ids[melhor_idx]
+
+        # 👉 PRINTA O ID RECONHECIDO
+        print(f"🔥 ID reconhecido: {funcionario_id}")
+        if funcionario_id == "Thiago de Andrade Silva":
+            funcionario_id = "6"
+        elif funcionario_id == "Gregorio Alves Rodrigues da Cruz":
+            funcionario_id = "8"
+        # -----------------------------------------------------
+        # 🔥 BUSCA NA API
+        # -----------------------------------------------------
+        url = f"https://tcc-reconhecimento-facial-h8rq.onrender.com/api/funcionarios/{funcionario_id}/"
+        r = requests.get(url)
+
+        # 👉 PRINTA O STATUS DA API
+        print("Status da API:", r.status_code)
+
+        if r.status_code == 200:
+            funcionario = r.json()
+            
+            # 👉 PRINTA O QUE VEIO DA API
+            print("🔥 Usuário reconhecido:", funcionario)
+            
+            self.show_recognized_user(funcionario)
+            self.reset_camera()
+        else:
+            print("❌ API retornou erro:", r.text)
+
+        self.stop_camera()
+
+    # -----------------------------------------------------
     def start_recognition(self, *args):
         self.recognition_enabled = True
 
@@ -105,24 +188,62 @@ class CameraScreen(MDScreen):
             self.cap.release()
         self.image.texture = None
         self.recognition_enabled = False
+    # -----------------------------------------------------
+    
+    def show_error(self):
+        def voltar(*args):
+            self.manager.current = 'main'
+            dialog.dismiss()
 
-    # Vai para a tela do usuário reconhecido
+        dialog = MDDialog(
+            title="Usuario não identificado",
+            text="Nenhum rosto válido reconhecido.\nTente novamente.",
+            buttons=[MDFlatButton(text="OK", on_release=voltar)]
+        )
+        dialog.open()
+
+
+    # -----------------------------------------------------
+    def stop_camera(self):
+        Clock.unschedule(self.load_video)
+        if self.cap:
+            self.cap.release()
+        self.image.texture = None
+        self.recognition_enabled = False
+
+
+    # -----------------------------------------------------
     def show_recognized_user(self, funcionario):
-        self.manager.current = 'usuario'
-        usuario_screen = self.manager.get_screen('usuario')
-        usuario_screen.ids.foto.source = funcionario["foto"]
+        self.manager.current = "usuario"
+        usuario_screen = self.manager.get_screen("usuario")
+
+        if getattr(sys, 'frozen', False):
+    # Se estiver empacotado (executável), a base é _MEIPASS
+            BASE_DIR = sys._MEIPASS
+        else:
+            # Se estiver rodando como script normal, a base é o diretório do arquivo
+            BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        nome_arquivo = f"assets/imagem-TCC-{funcionario['id']}.jpg"  # gera TCC-image-1.jpg, TCC-image-2.jpg etc
+        print(nome_arquivo)
+        caminho_imagem = os.path.join(BASE_DIR, nome_arquivo)
+
+        # Verifica se o arquivo existe
+        if os.path.exists(caminho_imagem):
+            usuario_screen.ids.foto.source = caminho_imagem
+        else:
+            usuario_screen.ids.foto.source = os.path.join(BASE_DIR, "foto_padrao.jpg")
+
         usuario_screen.ids.nome.text = f"Nome: {funcionario['nome']}"
         usuario_screen.ids.cpf.text = f"CPF: {funcionario['cpf']}"
         usuario_screen.ids.curso.text = f"Curso: {funcionario['curso']}"
         usuario_screen.ids.aula.text = f"Aula: {funcionario['aula']}"
         usuario_screen.ids.matricula.text = f"Matrícula: {funcionario['matricula']}"
-        usuario_screen.ids.data_hora.text = f"Data e Hora: {datetime.now().strftime('%d/%m/%Y às %H:%M')}"
+        usuario_screen.ids.data_hora.text = f"Data e Hora: {datetime.now().strftime('%d/%m/%Y %H:%M')}"
 
         usuario_screen.funcionario_id = funcionario["id"]
         usuario_screen.data_hora = datetime.now().isoformat()
         usuario_screen.ids.card.opacity = 1
         App.get_running_app().funcionario = funcionario
-
 
 class UsuarioScreen(MDScreen):
     def confirmar_registro(self):
@@ -160,7 +281,6 @@ class UsuarioScreen(MDScreen):
                 
         except Exception as e:
             print("Erro na conexão com a API:", e)
-
 
 class ComprovanteScreen(MDScreen):
     def set_dados(self, funcionario):
@@ -494,26 +614,20 @@ ScreenManagerApp:
         # Espaçamento do topo
         MDBoxLayout:
             orientation: "vertical"
-            spacing: "0dp"
-            padding: "0dp"
-            
-            # Espaço em branco para afastar do header
-            Widget:
-                size_hint: 1, None
-                height: "80dp"
+            spacing: "25dp"
+            padding: "20dp"
             
             ScrollView:
-                MDBoxLayout:
-                    orientation: "vertical"
-                    spacing: "25dp"
-                    padding: "20dp"
-                    adaptive_height: True
-                    
-                    # Card principal com dados do usuário
+                do_scroll_x: False
+
+                AnchorLayout:
+                    anchor_x: "center"
+                    anchor_y: "center"
+
                     MDCard:
                         id: card
-                        size_hint: 1, None
-                        height: "500dp"
+                        size_hint: None, None
+                        size: "450dp", "550dp"
                         md_bg_color: 1, 1, 1, 1
                         opacity: 0
                         padding: "20dp"
@@ -677,32 +791,37 @@ ScreenManagerApp:
                                         theme_text_color: "Primary"
                                         font_style: "Subtitle2"
                                         adaptive_height: True
+                                   
+                    FloatLayout:
+                        MDBoxLayout:
+                            orientation: "horizontal"
+                            spacing: "15dp"
+                            size_hint: None, None
+                            height: "58dp"
+                            width: self.minimum_width
+                            pos_hint: {"center_x": 0.5}
+                            y: dp(170)
+
+                            MDRaisedButton:
+                                text: "CONFIRMAR"
+                                font_size: "16sp"
+                                width: "150dp"  # Largura aumentada
+                                size_hint_x: None # Garante que a largura fixa seja usada
+                                md_bg_color: 0.192, 0.043, 0.282, 1
+                                on_press:
+                                    app.show_comprovante(app.funcionario)
+                                    root.confirmar_registro()
+
+                            MDRaisedButton:
+                                text: "CANCELAR"
+                                font_size: "16sp"
+                                width: "150dp"  # Largura aumentada
+                                size_hint_x: None # Garante que a largura fixa seja usada
+                                md_bg_color: 0.706, 0.706, 0.706, 1
+                                on_press:
+                                    root.manager.get_screen('camera').reset_camera()
+                                    root.manager.current = 'main'
                     
-                    # Botões de ação
-                    MDBoxLayout:
-                        orientation: "horizontal"
-                        spacing: "15dp"
-                        adaptive_height: True
-                        size_hint: 1, None
-                        height: "48dp"
-                        
-                        MDRaisedButton:
-                            text: 'CONFIRMAR'
-                            font_size: '14sp'
-                            size_hint: 0.6, 1
-                            md_bg_color: 0.192, 0.043, 0.282, 1
-                            on_press: app.show_comprovante(app.funcionario)
-                        
-                        MDRaisedButton:
-                            text: 'CANCELAR'
-                            font_size: '14sp'
-                            size_hint: 0.4, 1
-                            md_bg_color: 0.706, 0.706, 0.706, 1
-                            on_press: 
-                                root.manager.get_screen('camera').reset_camera()
-                                root.manager.current = 'main'
-                                
-                
 <ComprovanteScreen>:
     name: "comprovante"
     MDScreen: 
