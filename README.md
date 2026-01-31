@@ -1,4 +1,5 @@
-TCC — Reconhecimento Facial (TCC de Engenharia da Computação)
+# Reconhecimento Facial (TCC de Engenharia da Computação)
+Sistema de reconhecimento facial para registro de presença em instituições educacionais
 
 Projeto de Trabalho de Conclusão de Curso (TCC) do curso de Engenharia da Computação.
 Este repositório contém uma solução de reconhecimento facial para registro automático
@@ -95,5 +96,3 @@ Contato / Autoria
 - Projeto de TCC — Engenharia da Computação
 
 -- Fim --
-# TCC---Reconhecimento-Facial
-Sistema de reconhecimento facial para registro de presença em instituições educacionais
